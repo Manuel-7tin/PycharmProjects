@@ -1,0 +1,42 @@
+<form action="{{ url_for('decipher') }}" method="post" enctype="multipart/form-data" id="form">
+    <input type="file" name="rarFile" accept=".rar" id="fileID" style="display: none;">
+    <button class="btn" type="button" onclick="document.getElementById('fileID').click();">Choose File</button>
+    <button class="btn" type="submit" id="submitBtn"  style="display: none;">Upload</button>
+</form>
+
+<script>
+    document.getElementById("fileID").addEventListener("change", function() {
+        if (this.files.length > 0) {
+            document.getElementById("submitBtn").click();  // Submit the form after a file is selected
+        }
+    });
+
+  document
+  .getElementById("fileID")
+  .addEventListener("submit", function (event) {
+    event.preventDefault();
+    // Create a FormData object to combine both forms' data
+    var formData = new FormData(document.getElementById("form"));
+    formData.forEach((value, key) => {
+    console.log(key, value);
+});
+    console.log("omoo");
+
+    // Submit the combined form data via POST
+    fetch("/upload", {
+      method: "POST",
+      body: formData,
+    })
+      .then((response) => {
+        if (response.redirected) {
+          // Redirect manually using the URL from the response
+          window.location.href = response.url;
+        } else {
+          return response.json(); // For error handling or any other response
+        }
+      })
+      .catch((error) => {
+        console.error("Error:", error);
+      });
+  });
+</script>
