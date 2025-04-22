@@ -1,173 +1,180 @@
-# Adekunle Kofoworola, reporting for duty.
-# Import the necessary modules
-import tkinter as tk
-from tkinter import LEFT, Button, Entry, IntVar, Label, StringVar, messagebox
-from tkinter import filedialog
-from pathlib import Path
-from pypdf import PdfReader, PdfWriter
-import pyttsx3
-from speech_recognition import Recognizer, AudioFile
-from pydub import AudioSegment
-import os
+# NAME: OLANIYAN ENIOLA
 
-root = tk.Tk()  # Create a root Tkinter window
-root.withdraw()
-
-# Define variables globally
-start_pgNo = tk.IntVar()
-end_pgNo = tk.IntVar()
-
-# Define speaker globally
-speaker = pyttsx3.init()
+import spotipy
+from spotipy.oauth2 import SpotifyOAuth
+import requests
+from bs4 import BeautifulSoup
+import time
+import sys
 
 
-def stop_speech():
-    global speaker
-    # Stops the speaker.
-    speaker.stop()
-    speaker = pyttsx3.init()
+SPOTIPY_CLIENT_ID = "b087b554661a4d1ca974841f7733dcd7"
+SPOTIPY_CLIENT_SECRET = "16abfd4eeb874acebf47d544501b0325"
+SPOTIPY_REDIRECT_URI = "http://localhost:8888/callback"
+SCOPE = "playlist-modify-public"
+
+sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
+    client_id=SPOTIPY_CLIENT_ID,
+    client_secret=SPOTIPY_CLIENT_SECRET,
+    redirect_uri=SPOTIPY_REDIRECT_URI,
+    scope=SCOPE
+))
+
+# Get user ID
+try:
+    user_id = sp.current_user()["id"]
+except Exception as err:
+    print("Error retrieving current user from Spotify:", err)
+    sys.exit(1)
 
 
-# Open the selected PDF and read text from it as an audio.
-def read():
-    global speaker
-    global end_pgNo, start_pgNo
-    path = filedialog.askopenfilename()  # Get the path of the PDF based on the user's location selection
-    pdfLoc = open(path, 'rb')  # Opening the PDF
-    pdfreader = PdfReader(pdfLoc)  # Creating a PDF reader object for the opened PDF
+def get_top_10_songs(artist_name):
+    """
+    Fetch top 10 songs of an artist from Spotify using exact matching.
+    If exact matching fails, prompts user to choose from similar artists.
+    """
+    results = sp.search(q=f"artist:{artist_name}", type="artist", limit=5)
+    artist = None
 
-    start = int(start_pgNo.get())  # Get start and end page and convert input to integer
-    end = int(end_pgNo.get())
+    for item in results["artists"]["items"]:
+        if item["name"].lower() == artist_name.lower():
+            artist = item
+            break
 
-    # Reading all the pages from start to end page number
-    for i in range(start, end + 1):
-        page = pdfreader.pages[i]  # Getting the page of the PDF
-        txt = page.extract_text()  # Extracting the text from the PDF
-        speaker.say(txt)  # Getting the audio output of the text
-        speaker.runAndWait()  # Processing the voice commands
+    if not artist:
+        print(f"Exact match for artist '{artist_name}' not found.")
+        similar_artists = results["artists"]["items"]
+        if not similar_artists:
+            print("No similar artists found.")
+            return []
+        print("Did you mean one of these?")
+        for i, item in enumerate(similar_artists):
+            print(f" {i+1}. {item['name']}")
+        choice = input("Enter the number of the artist you'd like to select or press enter to cancel: ").strip()
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(similar_artists):
+                artist = similar_artists[idx]
+            else:
+                print("Invalid selection. Cancelling operation.")
+                return []
+        else:
+            print("Cancelling operation.")
+            return []
 
-
-# Function to create a GUI and get required inputs for PDF to Audio Conversion
-def pdf_to_audio():
-    # Creating a window
-    wn1 = tk.Tk()
-    wn1.title("Kofo's PDF to Audio converter")
-    wn1.geometry('500x400')
-    wn1.config(bg='lightblue')
-
-    Label(wn1, text='Kofo PDF to Audio converter',
-          fg='black', font=('Verdana', 15)).place(x=100, y=10)
-
-    Label(wn1, text='Enter the start and the end page to read.', anchor="e", justify=LEFT).place(x=120, y=90)
-
-    # Getting the input of the starting page
-    Label(wn1, text='Start Page No:').place(x=100, y=140)
-
-    startPg = Entry(wn1, width=20, textvariable=start_pgNo)
-    startPg.place(x=80, y=170)
-
-    # Getting the input of the ending page
-    Label(wn1, text='End Page No:').place(x=290, y=140)
-
-    endPg = Entry(wn1, width=20, textvariable=end_pgNo)
-    endPg.place(x=280, y=170)
-
-    # Button to select the PDF and get the audio input
-    Label(wn1, text='Choose a PDF file to convert to audio and click Stop to stop the audio.').place(x=70, y=230)
-    Button(wn1, text="Choose PDF", bg='darkgray', font=('Consolas', 13),
-           command=read).place(x=140, y=270)
-
-    # Stop Button
-    stop_button = Button(wn1, text="Stop", command=stop_speech, bg="darkgray", fg="black", font=("Consolas", 13),
-                         width=7, height=1)
-    stop_button.place(x=260, y=270)
-    wn1.mainloop()
+    artist_id = artist["id"]
+    top_tracks = sp.artist_top_tracks(artist_id)["tracks"]
+    return [(track["name"], track["id"]) for track in top_tracks[:10]]
 
 
-# Declaring global variable for PDF to Speech conversion
-global pdfPath
+def get_billboard_top_100(date):
+    """
+    Scrape Billboard Hot 100 for a given date (YYYY-MM-DD format).
+    Returns a list of tuples (song, artist) if successful.
+    """
+    url = f"https://www.billboard.com/charts/hot-100/{date}/"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    try:
+        response = requests.get(url, headers=headers)
+    except Exception as err:
+        print("Error fetching Billboard data:", err)
+        return []
+
+    if response.status_code != 200:
+        print(f"Failed to retrieve Billboard data. Status code: {response.status_code}")
+        return []
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    songs = [song.get_text(strip=True) for song in soup.select("h3.c-title.a-no-trucate")]
+    artists = [artist.get_text(strip=True) for artist in soup.select("span.c-label.a-no-trucate")]
+
+    if len(songs) != len(artists):
+        print("⚠️ Mismatch in songs and artists count. Billboard's structure may have changed.")
+        return []
+
+    return list(zip(songs, artists))
 
 
-# Function to update the PDF file with the text, both given as parameters
-def write_text(filename, text):
-    writer = PdfWriter()  # Creating a PDF writer object
-    writer.addBlankPage(72, 72)  # Creating a blank page
-    pdfPath = Path(filename)  # Getting the path of the PDF
-    with pdfPath.open('ab') as output_file:  # Opening the PDF
-        writer.write(output_file)  # saving the text in the writer object
-        output_file.write(text)  # writing the text in the PDF
+def search_song_on_spotify(song, artist):
+    """
+    Search for a song on Spotify by given song and artist names.
+    Returns track ID if found.
+    """
+    query = f"track:{song} artist:{artist}"
+    result = sp.search(q=query, type="track", limit=1)
+    tracks = result.get("tracks", {}).get("items", [])
+    return tracks[0]["id"] if tracks else None
 
 
-# Function to convert audio into text
-def convert():
-    path = filedialog.askopenfilename()  # Getting the location of the audio file
-    audioLoc = open(path, 'rb')  # Opening the audio file
-
-    pdf_loc = pdfPath.get()  # Getting the path of the PDF
-
-    # Getting the name and extension of the audio file and confirming if it is mp3 or wav
-    audioFileName = os.path.basename(audioLoc).split('.')[0]
-    audioFileExt = os.path.basename(audioLoc).split('.')[1]
-    if audioFileExt != 'wav' and audioFileExt != 'mp3':
-        messagebox.showerror('Error!', 'The format of the audio file should be either "wav" and "mp3".')
-
-    # If it's mp3 file, converting it into wav file
-    if audioFileExt == 'mp3':
-        audio_file = AudioSegment.from_file(Path(audioLoc), format='mp3')
-        audio_file.export(f'{audioFileName}.wav', format='wav')
-    source_file = f'{audioFileName}.wav'
-
-    # Creating a recognizer object and converting the audio into text
-    recog = Recognizer()
-    with AudioFile(source_file) as source:
-        recog.pause_threshold = 5
-        speech = recog.record(source)
-        text = recog.recognize_google(speech)
-        write_text(pdf_loc, text)
+def create_playlist(name, track_ids):
+    """
+    Create a Spotify playlist and add the provided track IDs.
+    """
+    try:
+        playlist = sp.user_playlist_create(user=user_id, name=name, public=True)
+        sp.playlist_add_items(playlist_id=playlist["id"], items=track_ids)
+        print(f"Playlist '{name}' created successfully!")
+    except Exception as err:
+        print("Error while creating playlist:", err)
 
 
-# Function to create a GUI and get required inputs for Audio to PDF Conversion
-def audio_to_pdf():
-    # Creating a window
-    wn2 = tk.Tk()
-    wn2.title("Kofo's Audio to PDF converter")
-    wn2.geometry('500x400')
-    wn2.config(bg='lightblue')
+def run_program():
+    """
+    Main loop to prompt the user for creating either a Billboard or
+    Top 10 artist playlist.
+    """
+    while True:
+        choice = input("\nEnter 'billboard' for Billboard playlist, type an artist name for Top 10 songs, or 'exit' to quit: ").strip().lower()
+        if choice == "exit":
+            print("Exiting program.")
+            break
 
-    pdfPath = StringVar(wn2)  # Variable to get the PDF path
+        if choice == "billboard":
+            date = input("Input date in this format YYYY-MM-DD: ").strip()
+            songs = get_billboard_top_100(date)
+            if not songs:
+                print(f"No songs found on Billboard Hot 100 for the date {date}.")
+                continue
 
-    Label(wn2, text='Kofo Audio to PDF converter',
-          fg='black', font=('Verdana', 15)).place(x=60, y=10)
+            print(f"\nFound {len(songs)} songs from Billboard Hot 100 on {date}:")
+            track_ids = []
+            for song, artist in songs:
+                track_id = search_song_on_spotify(song, artist)
+                if track_id:
+                    track_ids.append(track_id)
+                    print(f"Found: '{song}' by {artist}")
+                else:
+                    print(f"Not found on Spotify: '{song}' by {artist}")
+                time.sleep(1)
 
-    # Getting the PDF path
-    Label(wn2, text='Enter the PDF File location where you want to save:').place(x=20, y=70)
-    Entry(wn2, width=50, textvariable=pdfPath).place(x=20, y=100)
+            if not track_ids:
+                print("No valid tracks were found on Spotify.")
+                continue
 
-    Label(wn2, text='Choose the Audio File that you want to convert to PDF (.wav and .mp3 extensions only):',
-          fg='black').place(x=20, y=150)
+            print("\nCreating playlist with the logged songs...")
+            create_playlist(f"Billboard Hot 100 - {date}", track_ids)
 
-    # Button to select the audio file and convert it
-    Button(wn2, text='Choose', bg='darkgray', font=('Courier', 13),
-           command=convert).place(x=170, y=190)
-    wn2.mainloop()  # Runs the window till it is closed
+        else:
+            artist_name = choice
+            songs = get_top_10_songs(artist_name)
+            if not songs:
+                print(f"No songs found for artist '{artist_name}'.")
+                continue
+
+            print(f"\nTop 10 songs by {artist_name}:")
+            track_ids = []
+            for song_name, track_id in songs:
+                print(f" {song_name}")
+                track_ids.append(track_id)
+
+            print("\nCreating playlist with these songs...")
+            create_playlist(f"Top 10 - {artist_name}", track_ids)
 
 
-# Create the main window
-wn = tk.Tk()
-wn.title("Kofo's PDF to Audio and Audio to PDF converter")
-wn.geometry('700x300')
-wn.config(bg='lightpink')
-
-Label(wn, text='Kofo PDF to Audio and Audio to PDF converter',
-      fg='black', font=('Verdana', 15)).place(x=40, y=10)
-
-# Button to convert PDF to Audio
-Button(wn, text="Convert PDF to Audio", bg='darkgray', font=('Consolas', 15),
-       command=pdf_to_audio).place(x=230, y=80)
-
-# Button to convert Audio to PDF
-Button(wn, text="Convert Audio to PDF", bg='darkgray', font=('Consolas', 15),
-       command=audio_to_pdf).place(x=230, y=150)
-
-# Runs the window till it is closed
-wn.mainloop()
+if __name__ == "__main__":
+    run_program()

@@ -355,7 +355,7 @@ def parse_chat(messages: list) -> list:
             edited = False
         if "Media omitted" in msg_body:
             msg_body = msg_body.replace("<", "")
-        # Create dictionary containing message details
+        # Create dic;tionary containing message details
         a_chat = {"date": datetime.strptime(date, "%m/%d/%y"), "time": time, "name": name, "body": msg_body,
                   "type": msg_type, "edited": edited}
         parsed_chat.append(a_chat)
