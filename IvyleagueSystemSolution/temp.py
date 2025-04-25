@@ -27,6 +27,13 @@ serial_code = encode_serial(70)
 print(f"1331-{year_code:04d}-{serial_code:04d}")
 print(decode_year(6978), decode_serial(4849))
 {}.get("j")
+print(sum([1,2,3,4]))
+print("None".isdigit())
+def num(a, b):
+    print(a)
+x = 5
+
+
 
 from werkzeug.security import generate_password_hash, check_password_hash
 print(check_password_hash("pbkdf2:sha256:1000000$zxG7O6ST$6ec9723a0ea37e6c9ffecf47d4a1c8b6f4c6f85b2584f7a2f5ce46b57858f2f3", "a@123456"))

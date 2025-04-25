@@ -28,7 +28,36 @@ app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6b'
 class Base(DeclarativeBase):
     pass
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://test2.db'
+
+import psycopg2
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+
+def create_postgres_db_if_not_exists(db_name, user, password, host="localhost", port=5432):
+    try:
+        # Connect to default postgres database
+        conn = psycopg2.connect(dbname='postgres', user=user, password=password, host=host, port=port)
+        conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+
+        cur = conn.cursor()
+        cur.execute(f"SELECT 1 FROM pg_database WHERE datname = '{db_name}';")
+        exists = cur.fetchone()
+
+        if not exists:
+            cur.execute(f"CREATE DATABASE {db_name};")
+            print(f"✅ Database '{db_name}' created.")
+        else:
+            print(f"⚠️ Database '{db_name}' already exists.")
+
+        cur.close()
+        conn.close()
+
+    except Exception as e:
+        print(f"❌ Failed to create database: {e}")
+create_postgres_db_if_not_exists("test2", "postgres", "root")
+
+
+
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:root@localhost:5432/test2' #'postgresql://test2.db'
 db = SQLAlchemy(model_class=Base)
 db.init_app(app)
 
