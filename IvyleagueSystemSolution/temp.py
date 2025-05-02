@@ -28,12 +28,34 @@ print(f"1331-{year_code:04d}-{serial_code:04d}")
 print(decode_year(6978), decode_serial(4849))
 {}.get("j")
 print(sum([1,2,3,4]))
-print("None".isdigit())
+f = 6
+print("f".isdigit())
 def num(a, b):
     print(a)
 x = 5
+spent = 30_000 * (2025*365+506)
+money = 897_000_000 * 1600
+print((spent/money)*100)
+print((5/15)*100)
+class bee:
+    def __init__(self):
+        self.wings = 4
 
-
+b = bee()
+b.wings=3
+print(b.wings)
+from flask import Flask, jsonify
+app = Flask(__name__)
+def do():
+    with app.app_context():
+        return jsonify(
+            {
+                    "title": "user.title",
+                    "firstname": "user.first_name",
+            }
+        )
+# do()
+print(type(do()))#[0].json) #[0].get("title"))
 
 from werkzeug.security import generate_password_hash, check_password_hash
 print(check_password_hash("pbkdf2:sha256:1000000$zxG7O6ST$6ec9723a0ea37e6c9ffecf47d4a1c8b6f4c6f85b2584f7a2f5ce46b57858f2f3", "a@123456"))

@@ -1,4 +1,5 @@
 from datetime import date
+from threading import Thread
 from flask import Flask, jsonify, request #, abort, render_template, redirect, url_for, flash
 # from flask_bootstrap import Bootstrap5
 # from flask_ckeditor import CKEditor
@@ -56,11 +57,11 @@ def create_postgres_db_if_not_exists(db_name, user, password, host="localhost", 
 
     except Exception as e:
         print(f"❌ Failed to create database: {e}")
-create_postgres_db_if_not_exists("ivyLeague", "postgres", "root")
 
 
+create_postgres_db_if_not_exists("ivyleague", "postgres", "root")
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:root@localhost:5432/ivyLeague'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:root@localhost:5432/ivyleague'
 db = SQLAlchemy(model_class=Base)
 db.init_app(app)
 
@@ -68,8 +69,8 @@ db.init_app(app)
 student_paper = Table(
     "registrations",
     db.metadata,
-    Column("student_reg_no", String, ForeignKey("students.id")),
-    Column("paper_code", String, ForeignKey("papers.id"))
+    Column("student_id", Integer, ForeignKey("students.id")),
+    Column("paper_id", Integer, ForeignKey("papers.id"))
 )
 
 
@@ -152,7 +153,8 @@ class Student(db.Model):
     reg_date: Mapped[date] = mapped_column(Date, nullable=False, default=datetime.now())
     acca_reg_no: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     birth_date: Mapped[date] = mapped_column(Date, nullable=False)
-    phone_number: Mapped[str] = mapped_column(String(100))
+    phone_number: Mapped[str] = mapped_column(String(20), unique=True)
+    gender = mapped_column(String(5), nullable=False)
     joined: Mapped[date] = mapped_column(Date, nullable=False)
     new_student: Mapped[bool] = mapped_column(Boolean, nullable=False)
     sponsored: Mapped[bool] = mapped_column(Boolean, nullable=False)
@@ -175,7 +177,7 @@ class Student(db.Model):
     refund: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     receivable: Mapped[int] = mapped_column(Integer, nullable=False)
     papers = relationship("Paper", secondary=student_paper, back_populates="students")
-    payments = relationship("Payment", back_populates="payer")
+    payments = relationship("Payment", back_populates="student")
 
 
 # Create a table for the comments on the blog posts
@@ -222,13 +224,15 @@ class Attempt(db.Model):
     phone_number: Mapped[str] = mapped_column(String(20), nullable=False)
     created_at: Mapped[date] = mapped_column(DateTime, default=datetime.now)
     purpose: Mapped[str] = mapped_column(String(30), nullable=False)
+    context: Mapped[list] = mapped_column(ARRAY(String), nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
     closed_at: Mapped[date] = mapped_column(DateTime)
     payment_reference: Mapped[str] = mapped_column(String(30), nullable=False, unique=True)
     payment_status: Mapped[str] = mapped_column(String(20), default='pending')
     failure_cause: Mapped[str] = mapped_column(String(200))
     # Store everything else here
     other_data: Mapped[dict] = mapped_column(db.JSON)  # holds dob, courses, etc.
-    payment_data: Mapped[dict] = mapped_column(db.JSON)
+    # payment_data: Mapped[dict] = mapped_column(db.JSON)
 
 
 class Signee(db.Model):
@@ -249,7 +253,7 @@ class Sponsored(db.Model):
     __tablename__ = "sponsored"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     first_name: Mapped[str] = mapped_column(String(20), nullable=False)
-    second_name: Mapped[str] = mapped_column(String(20), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(20), nullable=False)
     company: Mapped[str] = mapped_column(String(20), nullable=False)
     papers: Mapped[list] = mapped_column(ARRAY(String), nullable=False)
     token: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -301,6 +305,7 @@ def is_valid_password(password: str) -> tuple:
 
 
 def log_attempt(data: dict, purpose: str, ref: str):
+    user_data = data["user_data"]
     new_attempt = Attempt(
         email=data.get("email"),
         first_name=data.get("firstname"),
@@ -308,9 +313,10 @@ def log_attempt(data: dict, purpose: str, ref: str):
         user_type=data.get("user_status"),
         phone_number=data.get("phone"),
         purpose=purpose,
+        context=user_data.get("paper") if user_data.get("paper") else user_data.get("context"),
+        amount=data.get("amount"),
         payment_reference=ref,
-        other_data=data.get("user_data"),
-        payment_data=data.get("payment_info"),
+        other_data=user_data,
     )
     db.session.add(new_attempt)
     db.session.commit()
@@ -320,6 +326,16 @@ def generate_payment_reference(prefix: str):
     unique_part = uuid.uuid4().hex  # 32-char hex string
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     return f"{prefix}-{timestamp}-{unique_part[:8]}"
+
+
+def calculate_payment_status(full_payment: int, paid:int):
+    if full_payment < paid:
+        payment_status = "Partly paid"
+    elif full_payment == paid:
+        payment_status = "Fully paid"
+    else:
+        payment_status = "Overpaid"
+    return payment_status
 
 
 def move_signee(info: dict, sponsored: bool, email: str, paid: any, spons_details: any=None):
@@ -340,12 +356,7 @@ def move_signee(info: dict, sponsored: bool, email: str, paid: any, spons_detail
         papers = db.session.query(Paper).filter(Paper.code.in_(info.get("papers"))).all()
         # paid = "get paid"
     full_payment = sum([paper.price for paper in papers])
-    if full_payment < paid:
-        payment_status = "Partly paid"
-    elif full_payment == paid:
-        payment_status = "Fully paid"
-    else:
-        payment_status = "Overpaid"
+    payment_status = calculate_payment_status(full_payment, paid)
 
     signee = db.session.execute(db.select(Signee).where(Signee.email == email)).scalar()
     new_student = Student(
@@ -357,6 +368,7 @@ def move_signee(info: dict, sponsored: bool, email: str, paid: any, spons_detail
         acca_reg_no=info.get("acca_reg"),
         birth_date=signee.birth_date,
         phone_number=signee.phone_number,
+        gender=signee.gender,
         joined=signee.created_at,
         new_student=True,
         sponsored=sponsored,
@@ -391,7 +403,7 @@ def update_action(email, action, details):
     db.session.commit()
 
 
-def update_payment(sponsored: bool, email: str, data: dict=None, spons_details: any=None):
+def update_payment(sponsored: bool, email: str, payment_data: dict=None, spons_details: any=None):
     student = db.session.execute(db.select(Student).where(Student.email == email)).scalar()
     if sponsored:
         papers = db.session.query(Paper).filter(Paper.code.in_(spons_details.papers)).all()
@@ -407,7 +419,6 @@ def update_payment(sponsored: bool, email: str, data: dict=None, spons_details: 
             student=student
         )
     else:
-        payment_data = data.get("data")
         new_payment = Payment(
             amount=payment_data.get("amount"),
             payment_reference=payment_data.get("reference"),
@@ -429,11 +440,103 @@ def update_payment(sponsored: bool, email: str, data: dict=None, spons_details: 
     db.session.commit()
 
 
+def insert_sponsored_row(firstname, lastname, org, papers, token):
+    new_sponsor = Sponsored(
+        first_name=firstname,
+        last_name=lastname,
+        company=org,
+        papers=papers,
+        token=token
+    )
+    db.session.add(new_sponsor)
+    db.session.commit()
+
+
+def post_payment_executions(reference: str, payment_data: dict) -> tuple:
+    """ This function is currently only capable of processing payments for registrations """
+    # attempt = db.session.query(Attempt).filter_by(payment_reference=reference).first()
+    attempt = db.session.query(Attempt).filter_by(payment_reference=reference).scalar()
+    user_type = attempt.user_type
+    email = attempt.email
+    if user_type.lower() == "signee":
+        try:
+            move_signee(attempt.other_data, sponsored=False, paid=payment_data["amount"], email=email)
+            update_payment(sponsored=False, email=email, payment_data=payment_data)
+        except Exception as e:
+            return jsonify(
+                error={"Error in post payment func": f"Unknown error {e}"}
+            ), 500
+        else:
+            operation_details = f"User registered their first ever course, payments made, [{attempt.context}]"
+            update_action(email, "Registered a course.", operation_details)
+            db.session.delete(attempt)
+            db.session.commit()
+            user = db.session.query(Student).filter_by(email=email).scalar()
+            return jsonify({
+                "title": user.title,
+                "firstname": user.first_name,
+                "lastname": user.last_name,
+                "email": user.email,
+                "sex": user.gender,
+                "reg_no": user.reg_no,
+                "acca_reg_no": user.acca_reg_no,
+                "papers": [{paper.code: paper.name} for paper in user.papers],
+                "user_status": "student",
+
+            }), 200
+    elif user_type.lower() == "student":
+        try:
+            student = db.session.query(Student).filter_by(email=email).scalar()
+            papers = db.session.query(Paper).filter(Paper.code.in_(attempt.other_data.get("papers"))).all()
+            student.papers.append(papers) # Relevant ones in the absence of sponsors
+            student.total_fee += sum([paper.price for paper in papers]) # Relevant ones in the absence of sponsors
+            student.amount_paid += payment_data.get("amount") # Relevant ones in the absence of sponsors
+            student.payment_status = calculate_payment_status(student.total_fee, student.amount_paid)
+            db.session.commit()
+            update_payment(sponsored=False, email=email, payment_data=payment_data)
+        except Exception as e:
+            return jsonify(
+                error={"Error in post payment func": f"Unknown error {e}"}
+            ), 400
+        else:
+            operation_details = f"User registered a new course, they were a student already, payments made, [{attempt.context}]"
+            update_action(email, "Registered a course.", operation_details)
+            db.session.delete(attempt)
+            db.session.commit()
+            user = db.session.query(Student).filter_by(email=email).scalar()
+            return jsonify({
+                "title": user.title,
+                "firstname": user.first_name,
+                "lastname": user.last_name,
+                "email": user.email,
+                "sex": user.gender,
+                "reg_no": user.reg_no,
+                "acca_reg_no": user.acca_reg_no,
+                "papers": [{paper.code: paper.name} for paper in user.papers],
+                "user_status": "student",
+
+            }), 200
+    elif user_type.lower() == "old_student":
+        return False, 500 # This functionality is not available yet
+    else:
+        return jsonify(
+            error={"Error in post payment func": f"Unknown user type"}
+        ), 400
+
+
+def post_webhook_process(ref, data):
+    print(post_payment_executions(ref, data))
+
+
+with app.app_context():
+    insert_sponsored_row("John", "Doe", "KPMG", ["APM-std", "BT-int"], "KPMG12345")
+
 # -----------------------------
 # Initialize Payment
 # -----------------------------
 # @app.route("/initialize-payment", methods=["POST"])
 def initialize_payment(data: dict, type_:str):
+    """ type: as in what are they paying for? reg? rev? vid? kit? etc """
     amount = data.get("amount")
     email = data.get("email")
     reference_id = generate_payment_reference(type_.split()[1]) #type_ can be REG, REV, KIT
@@ -454,7 +557,7 @@ def initialize_payment(data: dict, type_:str):
         "amount": amount * 100,  # Convert to kobo
         "email": email,
         "reference": reference_id,
-        "metadata": {"cart_id": 398,}
+        # "metadata": {"cart_id": 398,}
     }
 
     response = requests.post(f"{BASE_URL}/transaction/initialize", json=body, headers=headers)
@@ -477,16 +580,66 @@ def initialize_payment(data: dict, type_:str):
 # -----------------------------
 @app.route("/verify/<reference>", methods=["GET"])
 def verify_payment(reference):
-    pass
-    # headers = {
-    #     "Authorization": f"Bearer {PAYSTACK_SECRET_KEY}"
-    # }
-    #
-    # response = requests.get(f"{BASE_URL}/transaction/verify/{reference}", headers=headers)
-    #
-    # if response.status_code != 200:
-    #     return jsonify({"error": "Verification failed"}), 500
-    #
+    verified = db.session.query(Payment).filter_by(payment_reference=reference).scalar()
+    if verified:
+        user = verified.student
+        return jsonify({
+            "title": user.title,
+            "firstname": user.first_name,
+            "lastname": user.last_name,
+            "email": user.email,
+            "sex": user.gender,
+            "reg_no": user.reg_no,
+            "acca_reg_no": user.acca_reg_no,
+            "papers": [{paper.code: paper.name} for paper in user.papers],
+            "user_status": "student",
+        }), 200
+
+    headers = {
+        "Authorization": f"Bearer {PAYSTACK_SECRET_KEY}"
+    }
+
+    response = requests.get(f"{BASE_URL}/transaction/verify/{reference}", headers=headers)
+
+    if response.status_code != 200 or not response.json().get("status"):
+        return jsonify({"error": "Verification failed"}), 500
+    else:
+        feedback = response.json()["data"]
+        if feedback.get("status") == "success":
+            exec_response = post_payment_executions(reference, feedback)
+            if exec_response[1] != 200:
+                return jsonify(
+                    {
+                        "status": "error",
+                        "message": "Payment confirmed but internal db error, na gbese be this.",
+                        "paystack_says": response.json()["message"],
+                        "user_data": exec_response[0].json
+                    }
+                ), exec_response[1]
+            return jsonify(
+                {
+                    "status": "success",
+                    "message": "Payment confirmed, all db updated",
+                    "paystack_says": response.json()["message"],
+                    "user_data": exec_response[0].json
+                }
+            ), 200
+        elif feedback.get("status") in ["ongoing", "pending", "processing", "queued"]:
+            return jsonify(
+                {
+                    "status": "patience",
+                    "message": "Payment underway, exercise patience bros.",
+                    "paystack_says": response.json()["message"],
+                }
+            ), 200
+        elif feedback.get("status") in ["failed", "abandoned", "reversed"]:
+            return jsonify(
+                {
+                    "status": "obliterated",
+                    "message": "The payment is either abandoned, failed or reversed.",
+                    "paystack_says": response.json()["message"],
+                }
+            ), 200
     # data = response.json()
     # return jsonify(data), 200
 
@@ -506,6 +659,8 @@ def handle_webhook():
     # Example:
     # if event_type == 'charge.success':
     #     update_payment_status(reference, status='completed')
+    thread = Thread(target=post_webhook_process, args=(reference, event.get("data", {})))
+    thread.start()
 
     return jsonify({"status": "received"}), 200
 
@@ -699,8 +854,8 @@ def sign_up():
             # id=random.randint(3, 9),
             title=data.get("title"),
             email=data.get("email"),
-            first_name=data.get("firstname"),
-            last_name=data.get("lastname"),
+            first_name=data.get("firstname").title(),
+            last_name=data.get("lastname").title(),
             phone_number=data.get("phone"),
             birth_date=d_o_b,
             gender=data.get("sex"),
@@ -844,9 +999,11 @@ def register():
             }
         ), 403
     data = request.get_json()
-    data.get("diet").isdigit()
+    # Each diet has its own tables that would be named as such, the table to open will be determined by the diet
+    # This is for future updates purposes
+    print("tiypiee:", type(data.get("diet")))
     user_type = data.get("user_status")
-    if user_type != "signee" and user_type!= "student":
+    if user_type.lower() != "signee" and user_type.lower() != "student":
         return jsonify(
             error={
                 "Unknown User Type": f"User type {user_type} is not accepted"
@@ -883,11 +1040,11 @@ def register():
             student.sponsored = True
             student.sponsors = sponsorship.company
             student.sponsored_papers = ",".join([paper.split("-")[0] for paper in sponsorship.papers])
-            Student.employment_status = "Fully/Self employed"
+            student.employment_status = "Fully/Self employed"
             papers = db.session.query(Paper).filter(Paper.code.in_(sponsorship.papers)).all()
-            student.papers.append(papers)
-            student.total_fee += sum([paper.price for paper in papers])
-            student.amount_paid = sum([paper.price for paper in papers])
+            student.papers.append(papers) # Relevant ones in the absence of sponsors
+            student.total_fee += sum([paper.price for paper in papers]) # Relevant ones in the absence of sponsors
+            student.amount_paid += sum([paper.price for paper in papers]) # Relevant ones in the absence of sponsors
             db.session.commit()
             operation_details = f"User registered a new course, they were a student already, courses are sponsored, [{sponsorship.papers}]"
             update_action(data.get("email"), "Registered a course.", operation_details)
@@ -895,9 +1052,10 @@ def register():
                 "status": "success",
                 "message": "Registration successful",
             }), 201
+        elif user_type == "old student":
+            pass
     else: # User is sponsoring themselves
         return initialize_payment(data, "registration REG")
-        # Update action db after payment confirmation
 
 # @app.route("/login", methods=["POST"])
 # def login():
