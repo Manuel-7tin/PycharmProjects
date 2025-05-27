@@ -1,3 +1,5 @@
+from xml.etree.ElementTree import indent
+
 p = {1:"one", 2:"two"}
 print([1, 2, 4] + [3, 5, 4])
 print("std" in "sbd-int")
@@ -41,21 +43,67 @@ class bee:
     def __init__(self):
         self.wings = 4
 
-b = bee()
-b.wings=3
-print(b.wings)
-from flask import Flask, jsonify
-app = Flask(__name__)
-def do():
-    with app.app_context():
-        return jsonify(
-            {
-                    "title": "user.title",
-                    "firstname": "user.first_name",
-            }
-        )
-# do()
-print(type(do()))#[0].json) #[0].get("title"))
+import json
+with open("questions.json", mode="r")as file:
+    dict = json.load(file)
 
-from werkzeug.security import generate_password_hash, check_password_hash
-print(check_password_hash("pbkdf2:sha256:1000000$zxG7O6ST$6ec9723a0ea37e6c9ffecf47d4a1c8b6f4c6f85b2584f7a2f5ce46b57858f2f3", "a@123456"))
+
+def never_use_this():
+    """Completely deletes the postgres database without a trace"""
+    import psycopg2
+    import psycopg2.extensions
+    from psycopg2 import sql
+
+    # Database credentials
+    admin_db = "postgres"  # Default admin DB to connect to
+    host = "localhost"
+    user = "postgres"
+    password = "root"
+    port = 5432
+
+    # Database to delete
+    target_db = "ivyleague"
+
+    # Connect to the admin DB
+    conn = psycopg2.connect(
+        dbname=admin_db,
+        user=user,
+        password=password,
+        host=host,
+        port=port
+    )
+    conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+    cur = conn.cursor()
+
+    # Check if the DB exists
+    cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (target_db,))
+    exists = cur.fetchone()
+
+    if exists:
+        # Terminate all connections to the target DB
+        cur.execute(sql.SQL("""
+            SELECT pg_terminate_backend(pid)
+            FROM pg_stat_activity
+            WHERE datname = %s AND pid <> pg_backend_pid()
+        """), [target_db])
+
+        # Drop the database
+        cur.execute(sql.SQL("DROP DATABASE {}").format(sql.Identifier(target_db)))
+        print(f"Database '{target_db}' has been dropped.")
+    else:
+        print(f"Database '{target_db}' does not exist.")
+
+    # Clean up
+    cur.close()
+    conn.close()
+
+
+# never_use_this()
+d = datetime.datetime.now().day
+e = datetime.datetime.now().weekday()
+f = datetime.datetime.now().isoweekday()
+print(d, e, f)
+try:
+    print({}.get("dskk", 0)/100)
+except TypeError as e:
+    print("ba code")

@@ -1,0 +1,8 @@
+
+3292623, Aderibigbe Adesakin, 10-Mar-1986, ['FM'] - Data Not Saved : Student not registered with ACCA
+3656225, Karunwi Ayomide, 19-Mar-1996, ['AAA'] - Data Not Saved : Student not registered with ACCA
+3997305, Oladapo Olabisi, 10-Nov-1997, ['SBR'] - Data Not Saved : Student not registered with ACCA
+4432206, Odimegwu  Olive, 19-Mar-1995, ['AA'] - Data Not Saved : Student number (4432206) and date of birth (19-03-1995) do not match.
+4573722, Nnamdi Ohaeri, 11-Feb-1992, ['SBL'] - Data Not Saved : Student not registered with ACCA
+4795987, Oluyemi  Olamide, 19-Jan-1998, ['SBL', 'SBL'] - Data Not Saved : Student not registered with ACCA
+4842475, Akinsanya Omolara, 14-Sep-1996, ['FR', 'AA'] - Data Not Saved : Student number (4842475) and date of birth (14-09-1996) do not match.

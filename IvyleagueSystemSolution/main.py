@@ -4,7 +4,7 @@ from flask import Flask, jsonify, request #, abort, render_template, redirect, u
 # from flask_bootstrap import Bootstrap5
 # from flask_ckeditor import CKEditor
 # from flask_gravatar import Gravatar
-from flask_login import UserMixin, current_user #login_user, LoginManager, logout_user
+from flask_login import UserMixin #, current_user, login_user, LoginManager, logout_user
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import relationship, DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.exc import IntegrityError
@@ -20,8 +20,11 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 import pandas as pd
 from datetime import datetime
 import re
+import os
 import uuid
 import requests
+from alembic.config import Config
+from alembic import command
 
 BASE_URL = "https://api.paystack.co/"
 PAYSTACK_SECRET_KEY = "sk_test_962200b3c9d32ad7f9b0a2db706d11c86d3d9b3a"
@@ -78,8 +81,8 @@ class All(db.Model):
     __tablename__ = "all-students"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     reg_no: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
-    year: Mapped[str] = mapped_column(String(5), nullable=False)
-    diet: Mapped[str] = mapped_column(String(1), nullable=False)
+    year: Mapped[list] = mapped_column(ARRAY(String), nullable=False)
+    diet: Mapped[list] = mapped_column(ARRAY(String), nullable=False)
 
 
 # Create a Staff table for all your registered staffs
@@ -112,39 +115,9 @@ class Task(db.Model):
     comments: Mapped[str] = mapped_column(String(250), nullable=False)
 
 
-class Intensive(db.Model):
-    __tablename__ = "intensive_students"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    amount_paid: Mapped[int] = mapped_column(Integer, nullable=False)
-    fee: Mapped[int] = mapped_column(Integer, nullable=False)
-    scholarship_discount: Mapped[int] = mapped_column(Integer, nullable=False)
-    normal_discount: Mapped[int] = mapped_column(Integer, nullable=False)
-    deffered: Mapped[int] = mapped_column(Integer, nullable=False)
-    papers: Mapped[str] = mapped_column(Text, nullable=False)
-    student_id: Mapped[int] = mapped_column(Integer, db.ForeignKey("students.id"))
-    student = relationship("Student", back_populates="intensive_papers")
-
-
-class Standard(db.Model):
-    __tablename__ = "standard_students"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    amount_paid: Mapped[int] = mapped_column(Integer, nullable=False)
-    fee: Mapped[int] = mapped_column(Integer, nullable=False)
-    scholarship_discount: Mapped[int] = mapped_column(Integer, nullable=False)
-    normal_discount: Mapped[int] = mapped_column(Integer, nullable=False)
-    deffered: Mapped[int] = mapped_column(Integer, nullable=False)
-    papers: Mapped[str] = mapped_column(Text, nullable=False)
-    # Child relationship:"users.id" The users refers to the tablename of the User class.
-    # "comments" refers to the comments property in the User class.\
-    student_id: Mapped[int] = mapped_column(Integer, db.ForeignKey("students.id"))
-    student = relationship("Student", back_populates="standard_papers")
-
-
 class Student(db.Model):
     __tablename__ = "students"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # intensive_id: Mapped[int] = mapped_column(Integer, db.ForeignKey("intensive_students.id"))
-    # standard_id: Mapped[int] = mapped_column(Integer, db.ForeignKey("standard_students.id"))
     first_name: Mapped[str] = mapped_column(String(100))
     last_name: Mapped[str] = mapped_column(String(100))
     email: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
@@ -156,21 +129,22 @@ class Student(db.Model):
     phone_number: Mapped[str] = mapped_column(String(20), unique=True)
     gender = mapped_column(String(5), nullable=False)
     joined: Mapped[date] = mapped_column(Date, nullable=False)
-    new_student: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    new_student: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sponsored: Mapped[bool] = mapped_column(Boolean, nullable=False)
     sponsor: Mapped[str] = mapped_column(String(10))
     sponsored_papers: Mapped[str] = mapped_column(String(30))
+    total_fee: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount_paid: Mapped[int] = mapped_column(Integer, nullable=False)
+    payment_status: Mapped[str] = mapped_column(String(20))
     house_address: Mapped[str] = mapped_column(String(200))
     referral_source: Mapped[str] = mapped_column(String(100)) # friend, (tiktok/insta/fb/tw) ad, flyer etc
     referrer: Mapped[str] = mapped_column(String(100))
     employment_status:  Mapped[str] = mapped_column(String(30))
-    oxford_brookes: Mapped[bool] = mapped_column(Boolean)
-    intensive_papers = relationship("Intensive", back_populates="student")
-    standard_papers = relationship("Standard", back_populates="student")
     revision: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    total_fee: Mapped[int] = mapped_column(Integer, nullable=False)
-    amount_paid: Mapped[int] = mapped_column(Integer, nullable=False)
-    payment_status: Mapped[str] = mapped_column(String(20))
+    retake: Mapped[bool] = mapped_column(Boolean, default=False)
+    discount: Mapped[int] = mapped_column(Integer, default=0)
+    discount_papers: Mapped[list] = mapped_column(ARRAY(String), default=[])
+    oxford_brookes: Mapped[bool] = mapped_column(Boolean)
     accurate_data: Mapped[bool] = mapped_column(Boolean, nullable=False)
     alp_consent: Mapped[bool] = mapped_column(Boolean, nullable=False)
     terms_and_cond: Mapped[bool] = mapped_column(Boolean, nullable=False)
@@ -268,10 +242,27 @@ class Action(db.Model):
     description: Mapped[str] = mapped_column(String(150), nullable=False)
 
 
-# Creates all tables declared above, creates nothing if none is declared.
-with app.app_context():
-    db.create_all()
+def migrate(message: str = "Auto migration"):
+    # Ensure alembic.ini path is correct (adjust if needed)
+    alembic_ini_path = os.path.join(os.path.dirname(__file__), "alembic.ini")
 
+    alembic_cfg = Config(alembic_ini_path)
+
+    # OPTIONAL: set database URL dynamically
+    # alembic_cfg.set_main_option("sqlalchemy.url", "postgresql+psycopg2://user:pass@host/db")
+
+    print("📦 Generating migration script...")
+    command.revision(alembic_cfg, message=message, autogenerate=True)
+
+    print("🚀 Applying migration...")
+    command.upgrade(alembic_cfg, "head")
+# Creates all tables declared above, creates nothing if none is declared.
+
+with app.app_context():
+    # db.drop_all() # For development purposes
+    db.create_all()
+# if __name__ =="__main__":
+#     migrate("Make referrer nullable")
 
 def encode_year(year: int, a=117, b=53, m=10000):
     return (a * year + b) % m
@@ -356,6 +347,7 @@ def move_signee(info: dict, sponsored: bool, email: str, paid: any, spons_detail
         papers = db.session.query(Paper).filter(Paper.code.in_(info.get("papers"))).all()
         # paid = "get paid"
     full_payment = sum([paper.price for paper in papers])
+    full_payment = int(full_payment - (full_payment * info.get("discount", 0)/100))
     payment_status = calculate_payment_status(full_payment, paid)
 
     signee = db.session.execute(db.select(Signee).where(Signee.email == email)).scalar()
@@ -374,19 +366,21 @@ def move_signee(info: dict, sponsored: bool, email: str, paid: any, spons_detail
         sponsored=sponsored,
         sponsor=sponsor,
         sponsored_papers=sponsored_papers,
-        house_address=signee.phone_number,
-        referral_source=info.get("referral_source"),
-        referrer=info.get("friend"),
-        employment_status=employment,
-        oxford_brookes=info.get("oxford"),
         total_fee=full_payment,
         amount_paid=paid,
         payment_status=payment_status,
+        house_address=info.get("address"),
+        referral_source=info.get("referral_source"),
+        referrer=info.get("friend"),
+        employment_status=employment,
+        discount=info.get("discount"),
+        discount_papers=info.get("discount_papers", []),
+        oxford_brookes=info.get("oxford"),
         accurate_data=info.get("accuracy"),
         alp_consent=info.get("alp_consent"),
         terms_and_cond=info.get("terms"),
         refund=paid-full_payment if payment_status == "Overpaid" else 0,
-        recievable=full_payment-paid if payment_status == "Partly paid" else 0,
+        receivable=full_payment-paid if payment_status == "Partly paid" else 0,
         papers=papers,
     )
     db.session.add(new_student)
@@ -488,10 +482,18 @@ def post_payment_executions(reference: str, payment_data: dict) -> tuple:
         try:
             student = db.session.query(Student).filter_by(email=email).scalar()
             papers = db.session.query(Paper).filter(Paper.code.in_(attempt.other_data.get("papers"))).all()
+
+            full_payment = sum([paper.price for paper in papers])
+            full_payment = full_payment - (full_payment * attempt.other_data.get("discount")/100)
+            retaking = attempt.other_data.get("retaking")
+
             student.papers.append(papers) # Relevant ones in the absence of sponsors
-            student.total_fee += sum([paper.price for paper in papers]) # Relevant ones in the absence of sponsors
+            student.total_fee += full_payment # Relevant ones in the absence of sponsors
             student.amount_paid += payment_data.get("amount") # Relevant ones in the absence of sponsors
-            student.payment_status = calculate_payment_status(student.total_fee, student.amount_paid)
+            student.payment_status = calculate_payment_status(full_payment, student.amount_paid)
+            student.retake = retaking if not student.retake else student.retake
+            student.discount = attempt.other_data.get("discount")
+            student.discount_papers = attempt.other_data.get("discount_papers")
             db.session.commit()
             update_payment(sponsored=False, email=email, payment_data=payment_data)
         except Exception as e:
@@ -530,6 +532,45 @@ def post_webhook_process(ref, data):
 
 with app.app_context():
     insert_sponsored_row("John", "Doe", "KPMG", ["APM-std", "BT-int"], "KPMG12345")
+    insert_sponsored_row("Jane", "Doe", "PWC", ["FM-std", "MA-int"], "PWC12345")
+
+#fill into the papers db
+with app.app_context():
+    papers = pd.read_excel("resource/ivy pricing.xlsx")
+    """ name: Mapped[str] = mapped_column(Text, nullable=False)
+    students = relationship("Student", secondary=student_paper, back_populates="papers")
+    code: Mapped[str] = mapped_column(Text, nullable=False)
+    price: Mapped[int] = mapped_column(Integer, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)"""
+    for i, paper in papers.iterrows():
+        if not isinstance(paper["Knowledge papers"], float):
+            if "papers" in paper["Knowledge papers"].lower():
+                continue
+            variations = [(" Standard", "std"), (" Intensive", "int")]
+            for i in range(2):
+                code = paper["Knowledge papers"].split()[-1]
+                if code in ["BT", "FA", "MA", "CBL", "OBU", "DipIFRS"] and i != 0:
+                    continue
+                if code in ["OBU", "DipIFRS"]:
+                    revision = 0
+                    extension = ""
+                    price = paper.Standard
+                else:
+                    code = "TX" if code == "TAX" else code
+                    code = f"{code}-{variations[i][1]}"
+                    extension = variations[i][0]
+                    price = paper.Standard + (paper.revision if code[-3:] == "std" else 0)
+                    revision = 20_000 if code[-3:] == "std" else 0
+
+                new_paper = Paper(
+                    name=" ".join(paper["Knowledge papers"].split()[:-1]).title()+extension,
+                    code=code,
+                    price=int(price),
+                    revision=revision
+                )
+                db.session.add(new_paper)
+    db.session.commit()
+
 
 # -----------------------------
 # Initialize Payment
@@ -665,89 +706,89 @@ def handle_webhook():
     return jsonify({"status": "received"}), 200
 
 
-@app.route("/upload/file", methods=["POST"])
-def add_students(file):
-    if request.method == "POST":
-        # data = pd.read_excel("STUDENT POSITION REPORTfor EMMANUEL.xlsx", header=0, sheet_name="STANDARD
-        # CLASS")
-        data = pd.read_excel(file, header=0, sheet_name="STANDARD CLASS")
-        class_type = request.args.get("class")
-        class_dict = {"intensive": Intensive, "standard": Standard}
-        to_add = []
-        # L1 = ['DATE', 'FIRSTNAME ', 'LAST NAME', 'ACCA REG NO',
-        #       'EMAIL ADDRESS', 'DOB', 'PHONE NUMBER', 'NEW STUDENT', 'PAPERS']
-        # What if they add the file that has already been added in the past
-        sponsor_prompt = "I am a sponsored students (Please state employer's name)"
-        for (index, row) in data.iterrows():
-            # Extract Course codes
-            papers_column = [x for x in data.columns if "Papers of interest" in x]
-            code_title = ""
-            i = row[papers_column[0]]
-            try:
-                paper_name = i.split(", ")
-            except AttributeError:
-                print(type(i), "for value: ", i)
-            else:
-                for paper in paper_name:
-                    code = paper.split(" ")[-1]
-                    code = code.strip("()")
-                    code_title = code_title + code + "/"
-
-            # Calculate total price
-            papers = db.session.execute(db.select(Paper)).scalars().all()
-            paper_dict = {}
-            price = 0
-            amount_paid = 0
-            for paper in papers:
-                paper_code = paper.name.split(" ")[-1].lower()
-                paper_dict[paper_code] = paper.price
-            for title in code_title.split("/"):
-                price += paper_dict[title.lower()]
-            # Sort out sponsored students
-            if not pd.isna(row[sponsor_prompt]):
-                amount_paid = price
-
-            new_student = Student(
-                first_name=row.firstname,
-                last_name=row.lastname,
-                email=row.email,
-                reg_no=row["ACCA REG NO"],
-                birth_date=row.DOB,
-                phone_number=row["PHONE NUMBER"],
-                new_student=row["NEW STUDENT"],
-                sponsored=row[sponsor_prompt],
-                # intensive_papers = "wellwellwell",
-                # standard_papers = "wellwellwell",
-                revision=row["REVISION FEE"],
-                total_fee=row["TOTAL FEE"],
-                amount_paid=amount_paid,
-                refund=0,
-                receivable=0,
-            )
-            to_add.append(new_student)
-
-            if class_dict.get(class_type.lower()):
-                paper = class_dict[class_type.lower()](
-                    amount_paid=amount_paid,
-                    fee=price,
-                    scholarship_discount=0,
-                    normal_discount=0,
-                    deffered=0,
-                    papers=code_title,
-                    student = new_student
-                )
-                to_add.append(paper)
-            else:  # i.e a wrong class type was specified
-                pass
-            new_task = Task(
-                DoneBy = current_user,
-                category = "Data Upload", # Data Upload, Payment Upload, Stats Download, Data Change
-                time = datetime.now(),
-                description = "New student data upload",
-                comments = request.args.get("comment")
-            )
-            to_add.append(new_task)
-            db.session.add_all(to_add)
+# @app.route("/upload/file", methods=["POST"])
+# def add_students(file):
+#     if request.method == "POST":
+#         # data = pd.read_excel("STUDENT POSITION REPORTfor EMMANUEL.xlsx", header=0, sheet_name="STANDARD
+#         # CLASS")
+#         data = pd.read_excel(file, header=0, sheet_name="STANDARD CLASS")
+#         class_type = request.args.get("class")
+#         class_dict = {"intensive": Intensive, "standard": Standard}
+#         to_add = []
+#         # L1 = ['DATE', 'FIRSTNAME ', 'LAST NAME', 'ACCA REG NO',
+#         #       'EMAIL ADDRESS', 'DOB', 'PHONE NUMBER', 'NEW STUDENT', 'PAPERS']
+#         # What if they add the file that has already been added in the past
+#         sponsor_prompt = "I am a sponsored students (Please state employer's name)"
+#         for (index, row) in data.iterrows():
+#             # Extract Course codes
+#             papers_column = [x for x in data.columns if "Papers of interest" in x]
+#             code_title = ""
+#             i = row[papers_column[0]]
+#             try:
+#                 paper_name = i.split(", ")
+#             except AttributeError:
+#                 print(type(i), "for value: ", i)
+#             else:
+#                 for paper in paper_name:
+#                     code = paper.split(" ")[-1]
+#                     code = code.strip("()")
+#                     code_title = code_title + code + "/"
+#
+#             # Calculate total price
+#             papers = db.session.execute(db.select(Paper)).scalars().all()
+#             paper_dict = {}
+#             price = 0
+#             amount_paid = 0
+#             for paper in papers:
+#                 paper_code = paper.name.split(" ")[-1].lower()
+#                 paper_dict[paper_code] = paper.price
+#             for title in code_title.split("/"):
+#                 price += paper_dict[title.lower()]
+#             # Sort out sponsored students
+#             if not pd.isna(row[sponsor_prompt]):
+#                 amount_paid = price
+#
+#             new_student = Student(
+#                 first_name=row.firstname,
+#                 last_name=row.lastname,
+#                 email=row.email,
+#                 reg_no=row["ACCA REG NO"],
+#                 birth_date=row.DOB,
+#                 phone_number=row["PHONE NUMBER"],
+#                 new_student=row["NEW STUDENT"],
+#                 sponsored=row[sponsor_prompt],
+#                 # intensive_papers = "wellwellwell",
+#                 # standard_papers = "wellwellwell",
+#                 revision=row["REVISION FEE"],
+#                 total_fee=row["TOTAL FEE"],
+#                 amount_paid=amount_paid,
+#                 refund=0,
+#                 receivable=0,
+#             )
+#             to_add.append(new_student)
+#
+#             if class_dict.get(class_type.lower()):
+#                 paper = class_dict[class_type.lower()](
+#                     amount_paid=amount_paid,
+#                     fee=price,
+#                     scholarship_discount=0,
+#                     normal_discount=0,
+#                     deffered=0,
+#                     papers=code_title,
+#                     student = new_student
+#                 )
+#                 to_add.append(paper)
+#             else:  # i.e a wrong class type was specified
+#                 pass
+#             new_task = Task(
+#                 DoneBy = current_user,
+#                 category = "Data Upload", # Data Upload, Payment Upload, Stats Download, Data Change
+#                 time = datetime.now(),
+#                 description = "New student data upload",
+#                 comments = request.args.get("comment")
+#             )
+#             to_add.append(new_task)
+#             db.session.add_all(to_add)
 
 
 # HTTP GET - Read Record
@@ -1018,24 +1059,24 @@ def register():
                 }
             ), 409
 
-        if user_type == "signee":
-            try:
-                move_signee(data.get("info"), sponsored=True, paid=None, spons_details=sponsorship, email=data.get("email"))
-                operation_details = f"User registered their first ever course, courses are sponsored, [{sponsorship.papers}]"
-                update_action(data.get("email"), "Became a student.", operation_details)
-                update_payment(sponsored=True, email=data.get("email"), spons_details=sponsorship)
-            except Exception as e:
-                return jsonify(
-                    error={
-                        "Some kinda DB Error": f"Error is {e}.",
-                    }
-                ), 409
-            else:
-                return jsonify({
-                    "status": "success",
-                    "message": "Registration successful",
-                }), 201
-        elif user_type == "student":
+        if user_type.lower() == "signee":
+            # try:
+            move_signee(data.get("info"), sponsored=True, paid=None, spons_details=sponsorship, email=data.get("email"))
+            operation_details = f"User registered their first ever course, courses are sponsored, [{sponsorship.papers}]"
+            update_action(data.get("email"), "Became a student.", operation_details)
+            update_payment(sponsored=True, email=data.get("email"), spons_details=sponsorship)
+            # except Exception as e:
+            #     return jsonify(
+            #         error={
+            #             "Some kinda DB Error": f"Error is {e}.",
+            #         }
+            #     ), 409
+            # else:
+            return jsonify({
+                "status": "success",
+                "message": "Registration successful",
+            }), 201
+        elif user_type.lower() == "student":
             student = db.session.execute(db.select(Student).where(Student.reg_no == data.get("reg_no"))).scalar()
             student.sponsored = True
             student.sponsors = sponsorship.company
@@ -1057,10 +1098,45 @@ def register():
     else: # User is sponsoring themselves
         return initialize_payment(data, "registration REG")
 
+
+# GET request to biodata endpoint  ✔🎉
+# GET request for a courses endpoint types=[int, std, all] 👎
+# the courses endpoint should also check and return if student is scholarship qualified ✔🎉
+# with old students and students the courses endpoint should return all courses they took in the last diet ("history" so to speak) ⏸️✋
+# Change the way you get serial number, instead of getting the db len you should decode the last reg number ✔🎉
+# Update to above, what if the last person has completely deferred and they are no longer in the students db, the last reg will be misleading. Ask Gpt ✔🎉
+# When they defer you have to update the all_students db with the change in case of a total  ⏸️✋
+# It makes sense to set the retake value only for oldees but what if the oldee became a current student before retaking, reason am ✔🎉
+# Might need to send an additional fee charge dict when a request is made to the courses endpoint {fee:123, reason:"ds"} ✔🎉
+# when a scholarship has been used the email key should be set to email += " |used" ✔🎉
+# Might want to change the reg number algorithm to account for diet too ⏸️✋
+# Add a usewd column to the sponsiored table so a key can't be used multiple times ✔🎉
+# Add a payment breakdown kini in the payment info ⏸️✋
+# Add category option to papers db ✔🎉
+# ADD availability option to papers db ✔🎉
+#--NEW
+# With the courses endpoint i should send the students current courses ✔🎉
+# Check before registering that are not already doing the course ✔🎉
+# There is a problem of id increasing whenever a commit is made and for some reason it fails ⏸️✋
+# Fix problem of 2+ paper scholarship where one is used and the entire entry in db is set to used even though there's still 1+ left ✔🎉
+# As per last issue i will fix it by removing the unique constraint from "email", " |used" will only be added to the used once, using a list to loop throu... ✔🎉
+# Feature to mark a transaction as abandoned after a timeframe, like days or hours ✔🎉
+# Update sign up and sign in process to chack "all" db to account for those who already have an account ✔🎉
+# Do not forget to make students db account for diet and year i.e sumn like student202502
+# Do not forget token issues so they do not access a page if they aren't signed in
+# Check that acca reg no is not being duplicated ✔🎉
+# Verify how many digits is an acca reg no?
+#
+
 # @app.route("/login", methods=["POST"])
 # def login():
 #     pass
 
+##-----ADMIN------##
+# Make a course available or unavailable
+# Create a course
+# Create Sponsored
+# Create Scholarship
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5001)

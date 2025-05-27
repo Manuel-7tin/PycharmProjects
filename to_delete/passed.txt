@@ -1,0 +1,55 @@
+2861638, Akinbode Uyodhuka Precious , 09-Dec-1987, output.text
+3109953, Eluwole Oluwatosin , 31-Dec-1989, - Data Saved Successfully
+3117376, Onyedika  Uju, 05-Dec-1988, - Data Saved Successfully
+3236378, Uwaechie Kate, 14-Jun-1991, - Data Saved Successfully
+3362194, Nwonwu Queen, 16-Jan-1992, ['APM'] - Data Saved Successfully
+3378824, Otaru Mariam, 24-Jun-1997, ['SBL'] - Data Saved Successfully
+3552975, Nzewi  Uchechukwu Cynthia Nzewi , 01-Nov-1993, ['FM', 'AA'] - Data Saved Successfully
+3587104, Samuel Andy, 27-Sep-1991, ['MA', 'FA', 'LW'] - Data Saved Successfully
+3649079, Gooee Chandnee, 19-Dec-1994, ['SBR'] - Data Saved Successfully
+3672972, Ariwo-ola Zainab, 18-May-1997, ['SBR', 'AFM', 'AAA'] - Data Saved Successfully
+3681482, Ogunlesi Oluwatosin, 31-Jul-1997, ['PM'] - Data Saved Successfully
+3841320, Olabanji  Olawale Joseph , 04-Mar-1980, ['AA', 'FM', 'PM'] - Data Saved Successfully
+3912428, Salaam Quwiyu, 05-May-1993, ['SBL'] - Data Saved Successfully
+3918680, Akanle Abimbola, 14-Aug-1994, ['SBL', 'TX'] - Data Saved Successfully
+3924321, Olayemi Damilola, 11-Sep-1992, ['SBR', 'ATX'] - Data Saved Successfully
+4000847, Dejo-Ojomo Ololade, 02-May-1983, ['FR'] - Data Saved Successfully
+4019132, Whiley Essien, 24-Nov-1996, ['AA', 'SBL', 'APM'] - Data Saved Successfully
+4259104, Sobanjo Oluwadolapo , 02-Feb-1999, ['PM', 'FR', 'FM'] - Data Saved Successfully
+4294131, Adeitan Adedayo, 02-Aug-1987, ['SBL', 'AFM'] - Data Saved Successfully
+4294687, Adebayo  Christiana , 13-Jul-1985, ['SBL', 'SBR'] - Data Saved Successfully
+4300578, Olugbade Tobiloba, 06-Dec-1999, ['AAA'] - Data Saved Successfully
+4341311, Olorode Aderiike, 25-Sep-1995, ['FA'] - Data Saved Successfully
+4357200, Sulaimon Khadijat, 14-Jul-2001, ['ATX'] - Data Saved Successfully
+4366284, Monye Vivian A., 05-Jan-1992, ['AFM'] - Data Saved Successfully
+4378340, Okeke  Chikamso , 10-Jan-1998, ['AAA'] - Data Saved Successfully
+4446474, kolofo Adem, 03-Mar-1986, ['FR'] - Data Saved Successfully
+4451321, Ajayi Blessing, 17-Jan-1990, ['SBL'] - Data Saved Successfully
+4518166, Ogboghodo Odosamamwen, 20-Sep-1994, ['SBR'] - Data Saved Successfully
+4552697, Nwaneri-Ahiarakwe  Chidinma , 24-Jun-1997, ['PM', 'TX', 'FM'] - Data Saved Successfully
+4575689, Awodun  Umar-Farouq , 11-Jul-2000, ['SBL', 'SBR'] - Data Saved Successfully
+4584373, Nwaokocha  Joy, 27-Nov-1997, ['PM', 'AA'] - Data Saved Successfully
+4615136, Ayeni Emmanuel, 30-Dec-1988, ['FR', 'PM'] - Data Saved Successfully
+4636665, UDEAGU CHINAZAEKPERE, 10-Dec-1987, ['AFM', 'AAA'] - Data Saved Successfully
+4640224, Afolabi Olamide, 19-Feb-1995, ['PM'] - Data Saved Successfully
+4640907, Ilesanmi Adeola , 29-Oct-1988, ['AFM', 'APM'] - Data Saved Successfully
+4700555, Ayinde Kafayat, 08-Feb-1993, ['SBL'] - Data Saved Successfully
+4744963, Jarikre Victor, 22-Apr-2001, ['SBR', 'AAA'] - Data Saved Successfully
+4746303, Oyekan Joy, 05-Jun-2000, ['SBR', 'ATX'] - Data Saved Successfully
+4747038, Ajani Adeyemi , 08-Aug-1986, ['FA'] - Data Saved Successfully
+4766030, Nwodoh  Amarachi , 18-Aug-1994, ['SBR'] - Data Saved Successfully
+4793120, Odutemowo Agbolahan, 05-Jul-1993, ['AFM'] - Data Saved Successfully
+4807415, Aina Ibidotun, 17-Dec-1993, ['ATX'] - Data Saved Successfully
+4821771, Lawal Bolajoko, 27-Feb-1995, ['SBL', 'AFM'] - Data Saved Successfully
+4822707, Olabode Hafsat , 16-Jan-1999, ['SBL', 'AFM'] - Data Saved Successfully
+4851483, Abdullahi  Amina, 02-Dec-1996, ['SBR'] - Data Saved Successfully
+4860004, OLOWE AYODEJI, 01-May-1997, ['SBL', 'SBR', 'AFM'] - Data Saved Successfully
+4920135, Obu Chisom, 06-May-1993, ['SBR', 'APM'] - Data Saved Successfully
+4949430, Gimba Abiriyi, 10-Apr-1996, ['AA'] - Data Saved Successfully
+4960707, Agi Mayflowers Kysburn, 15-May-1993, ['ATX'] - Data Saved Successfully
+5021664, Anoliefo Harrison, 10-Oct-1997, ['SBL'] - Data Saved Successfully
+5031596, Ayiti Adebayo, 05-Feb-1989, ['AFM'] - Data Saved Successfully
+5055026, Zubairu Sani John, 28-Oct-1990, ['FM'] - Data Saved Successfully
+5064623, Omotayo Samson, 08-Dec-1988, ['SBL', 'SBR', 'AFM'] - Data Saved Successfully
+5094247, Otitoju Adejoke, 22-May-1998, ['SBR'] - Data Saved Successfully
+5175868, Oluwaseun Dare, 23-Jul-1982, ['AFM', 'APM'] - Data Saved Successfully
