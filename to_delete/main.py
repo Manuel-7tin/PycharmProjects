@@ -4,6 +4,7 @@ import time
 import pandas as pd
 from datetime import datetime
 
+
 chrome_options = webdriver.ChromeOptions()
 chrome_options.add_experimental_option("detach", True)
 driver = webdriver.Chrome(chrome_options)

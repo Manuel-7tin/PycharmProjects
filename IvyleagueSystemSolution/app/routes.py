@@ -11,6 +11,7 @@ from services.db_services import insert_sponsored_row, is_valid_password
 from werkzeug.security import generate_password_hash, check_password_hash
 from services.db_services import post_payment_executions, post_webhook_process, exists_in_models
 from services.db_services import move_signee, update_action, update_payment, initialize_payment
+from services.account_services import send_signup_message, verify_email, send_password_reset_message
 from .models import db, All, Payment, Signee, Student, Sponsored, Paper, SystemData, Scholarship, Attempt
 
 
@@ -187,6 +188,7 @@ def register_routes(app):
                 gender=data.get("gender"),
                 password=hash_and_salted_password
             )
+            send_signup_message(data.get("firstname").title(), data.get("email"))
             with app.app_context():
                 db.session.add(new_signee)
                 db.session.commit()
@@ -255,6 +257,7 @@ def register_routes(app):
                         "user_status": "signee",
                         "dob": user.birth_date,
                         "phone_no": user.phone_number,
+                        "email_verified": user.email_confirmed,
                         "address": "",
                         "reg_no": "",
                         "acca_reg": ""
@@ -352,7 +355,7 @@ def register_routes(app):
             if not sponsorship:
                 return jsonify(
                     error={
-                        "Invalid Token": f"The token is invalid, try again. {(data.get("token"), Sponsored.token)}",
+                        "Invalid Token": f"The code is invalid, try again.", # code refers to token in db # {(data.get("token"), Sponsored.token)}",
                     }
                 ), 409
             elif not (sponsorship.first_name.title() == data.get("firstname") and sponsorship.last_name.title() == data.get("lastname")):
@@ -423,61 +426,6 @@ def register_routes(app):
                     ), 403
 
             return initialize_payment(data, "registration REG")
-
-    # with app.app_context():
-    #     papers = pd.read_excel("resource/ivy pricing.xlsx")
-    #     """ name: Mapped[str] = mapped_column(Text, nullable=False)
-    #     students = relationship("Student", secondary=student_paper, back_populates="papers")
-    #     code: Mapped[str] = mapped_column(Text, nullable=False)
-    #     price: Mapped[int] = mapped_column(Integer, nullable=False)
-    #     revision: Mapped[int] = mapped_column(Integer, nullable=False)"""
-    #     for i, paper in papers.iterrows():
-    #         if not isinstance(paper["Knowledge papers"], float):
-    #             if "papers" in paper["Knowledge papers"].lower():
-    #                 continue
-    #             variations = [(" Standard", "std"), (" Intensive", "int")]
-    #             for i in range(2):
-    #                 code = paper["Knowledge papers"].split()[-1]
-    #                 if code in ["BT", "FA", "MA", "CBL", "OBU", "DipIFRS"] and i != 0:
-    #                     continue
-    #                 if code in ["OBU", "DipIFRS"]:
-    #                     revision = 0
-    #                     extension = ""
-    #                     category = "Additional"
-    #                     price = paper.Standard
-    #                 else:
-    #                     if code in ["BT", "FA", "MA"]:
-    #                         category = "Knowledge"
-    #                     elif code in ["PM", "FR", "AA", "TAX", "FM", "CBL"]:
-    #                         category = "Skill"
-    #                     else:
-    #                         category = "Professional"
-    #                     code = "TX" if code == "TAX" else code
-    #                     code = f"{code}-{variations[i][1]}"
-    #                     extension = variations[i][0]
-    #                     price = paper.Standard + (paper.revision if code[-3:] == "std" else 0)
-    #                     revision = 20_000 if code[-3:] == "std" else 0
-    #
-    #                 new_paper = Paper(
-    #                     name=" ".join(paper["Knowledge papers"].split()[:-1]).title() + extension,
-    #                     code=code,
-    #                     price=int(price),
-    #                     revision=revision,
-    #                     category=category
-    #                 )
-    #                 db.session.add(new_paper)
-    #         db.session.commit()
-    #
-    #     with app.app_context():
-    #         with open("questions.json", mode="r") as file:
-    #             data = json.load(file)
-    #         new_data = SystemData(
-    #             data_name="reg_form_info",
-    #             data=data
-    #         )
-    #         db.session.add(new_data)
-    #         db.session.commit()
-
 
 
     @app.route("/api/v1/required-info", methods=["GET"])
@@ -565,21 +513,150 @@ def register_routes(app):
             return jsonify(details), 200
 
 
-    @app.route("/api/v1/reset-password")
-    def recover_password():
-        print("hello")
+    @app.route("/api/v1/confirm-email", methods=["POST"])
+    def confirm_email():
+        if request.args.get("api-key") != "AyomideEmmanuel":
+            return jsonify(
+                error={
+                    "Access Denied": f"You do not have access to this resource",
+                }
+            ), 403
+        token = request.args.get("token")
+        if token is None:
+            data = request.get_json()
+            user = db.session.query(Signee).filter_by(email=data.get("email")).scalar()
+            if not user:
+                return jsonify(error={"In-Existent User": "Email doesn't exist"}), 400
+            send_signup_message("User", data.get("email"))
+            return jsonify({"message": "Check your email to confirm your account."}), 200
+        else:
+            res = verify_email(token)
+            if res[0] == "success":
+                user = db.session.query(Signee).filter_by(email=res[1]).scalar()
+                user.email_confirmed = True
+                db.session.commit()
+                return jsonify({
+                    "status": "success",
+                    "message": "Email verified successfully!"
+                }), 200
+            else:
+                return jsonify(
+                    error={
+                    "Verification Failed": f"Email unverified, token is {res[0]}!"
+                }
+                ), 400
+
+    @app.route("/api/v1/reset-password", methods=["POST"])
+    def reset_password():
+        if request.args.get("api-key") != "AyomideEmmanuel":
+            return jsonify(
+                error={
+                    "Access Denied": f"You do not have access to this resource",
+                }
+            ), 403
+        token = request.args.get("token")
+        data = request.get_json()
+        if token:
+            ver_pword = is_valid_password(data.get("password"))
+            if not ver_pword[0]:
+                return jsonify(
+                    error={
+                        "Invalid Password": f"Error cause: [{ver_pword[1]}]",
+                    }
+                ), 400
+            res = verify_email(token)
+            if res[0] == "success":
+                user = db.session.query(Signee).filter_by(email=res[1]).scalar()
+                user = db.session.query(Student).filter_by(email=res[1]).scalar() if not user else user
+                hash_and_salted_password = generate_password_hash(
+                    data.get("password"),
+                    method='pbkdf2:sha256',
+                    salt_length=8
+                )
+                user.password = hash_and_salted_password
+                db.session.commit()
+                return jsonify({
+                    "status": "success",
+                    "message": "Password updated successfully!"
+                }), 200
+            else:
+                return jsonify(
+                    error={
+                    "Update Failed": f"Password not updated, token is {res[0]}!"
+                }
+                ), 400
+        else:
+            user = db.session.query(Signee).filter_by(email=data.get("email")).scalar()
+            user = db.session.query(Student).filter_by(email=data.get("email")).scalar() if not user else user
+            if not user:
+                return jsonify(error={"In-Existent User": "Email doesn't exist"}), 400
+            send_password_reset_message("there", data.get("email"))
+            return jsonify({"message": "Check your email to change your account password."}), 200
+
 
     @app.route("/api/v1/temp", methods=["GET"])
     def gy():
         s = request.args.get("api-key").lower() == "true"
         print(type(s), s)
-        return jsonify({"res":s})
-
+        return jsonify({"res": s})
 
 
     # with app.app_context():
+    #     papers = pd.read_excel("resource/ivy pricing.xlsx")
+    #     """ name: Mapped[str] = mapped_column(Text, nullable=False)
+    #     students = relationship("Student", secondary=student_paper, back_populates="papers")
+    #     code: Mapped[str] = mapped_column(Text, nullable=False)
+    #     price: Mapped[int] = mapped_column(Integer, nullable=False)
+    #     revision: Mapped[int] = mapped_column(Integer, nullable=False)"""
+    #     for i, paper in papers.iterrows():
+    #         if not isinstance(paper["Knowledge papers"], float):
+    #             if "papers" in paper["Knowledge papers"].lower():
+    #                 continue
+    #             variations = [(" Standard", "std"), (" Intensive", "int")]
+    #             for i in range(2):
+    #                 code = paper["Knowledge papers"].split()[-1]
+    #                 if code in ["BT", "FA", "MA", "CBL", "OBU", "DipIFRS"] and i != 0:
+    #                     continue
+    #                 if code in ["OBU", "DipIFRS"]:
+    #                     revision = 0
+    #                     extension = ""
+    #                     category = "Additional"
+    #                     price = paper.Standard
+    #                 else:
+    #                     if code in ["BT", "FA", "MA"]:
+    #                         category = "Knowledge"
+    #                     elif code in ["PM", "FR", "AA", "TAX", "FM", "CBL"]:
+    #                         category = "Skill"
+    #                     else:
+    #                         category = "Professional"
+    #                     code = "TX" if code == "TAX" else code
+    #                     code = f"{code}-{variations[i][1]}"
+    #                     extension = variations[i][0]
+    #                     price = paper.Standard + (paper.revision if code[-3:] == "std" else 0)
+    #                     revision = 20_000 if code[-3:] == "std" else 0
+    #
+    #                 new_paper = Paper(
+    #                     name=" ".join(paper["Knowledge papers"].split()[:-1]).title() + extension,
+    #                     code=code,
+    #                     price=int(price),
+    #                     revision=revision,
+    #                     category=category
+    #                 )
+    #                 db.session.add(new_paper)
+    #         db.session.commit()
+    #
+    #     with app.app_context():
+    #         with open("questions.json", mode="r") as file:
+    #             data = json.load(file)
+    #         new_data = SystemData(
+    #             data_name="reg_form_info",
+    #             data=data
+    #         )
+    #         db.session.add(new_data)
+    #         db.session.commit()
+    # with app.app_context():
     #     insert_sponsored_row("John", "Doe", "KPMG", ["APM-std", "BT-int"], "KPMG12345")
-    #     insert_sponsored_row("Ojutalayo", "Ayomide", "Deloitte", ["AFM-std", "SBL-int"], "Deloitte789")
+    #     insert_sponsored_row("Ayomide", "Ojutalayo", "Deloitte", ["AFM-std", "SBL-int"], "Deloitte789")
     #     insert_sponsored_row("Jane", "Doe", "PWC", ["FM-std", "MA-int"], "PWC12345")
     #
     # with app.app_context():
@@ -591,4 +668,3 @@ def register_routes(app):
     #     db.session.add(new_schols)
     #     db.session.commit()
 
-"ibbd bmzf qwra jbwv"

@@ -99,6 +99,8 @@ def never_use_this():
 
 
 # never_use_this()
+# from services.account_services import send_signup_message, verify_email
+# send_signup_message("test_user", "opolopothings@gmail.com")
 d = datetime.datetime.now().day
 e = datetime.datetime.now().weekday()
 f = datetime.datetime.now().isoweekday()

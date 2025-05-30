@@ -6,31 +6,48 @@ for i in range(7):
         continue
     print(f"L{i}")
 
-episodes = [201, 202, 203, 204, 205]
-retry_limit = 3  # Max retries per episode
-retry_counts = {}
+import os
 
-i = 0
-while i < len(episodes):
-    episode = episodes[i]
-    print(f"Trying episode {episode}")
+class CrdownloadChecker:
+    def __init__(self, folder_path):
+        if not os.path.isdir(folder_path):
+            raise ValueError(f"The path '{folder_path}' is not a valid directory.")
+        self.folder_path = folder_path
 
+    def count_crdownload_files(self):
+        """Count the number of .crdownload files in the folder."""
+        return sum(
+            1 for file in os.listdir(self.folder_path)
+            if file.endswith('.crdownload') and os.path.isfile(os.path.join(self.folder_path, file))
+        )
+
+    def get_crdownload_filenames(self):
+        """Return a list of .crdownload file names in the folder."""
+        return [
+            file for file in os.listdir(self.folder_path)
+            if file.endswith('.crdownload') and os.path.isfile(os.path.join(self.folder_path, file))
+        ]
+
+    def get_file_size(self, filename):
+        """Return the size of a specific file in bytes. Raises error if file doesn't exist."""
+        file_path = os.path.join(self.folder_path, filename)
+        if not os.path.isfile(file_path):
+            raise FileNotFoundError(f"The file '{filename}' does not exist in the folder.")
+        return os.path.getsize(file_path)
+
+
+# Example usage:
+if __name__ == "__main__":
+    folder = "C:/Users/PC/Downloads/"  # Change this to your target directory
+    checker = CrdownloadChecker(folder)
+
+    print("Number of .crdownload files:", checker.count_crdownload_files())
+    print("List of .crdownload files:", checker.get_crdownload_filenames())
+
+    # Example of checking a specific file size
     try:
-        # Try your download logic here
-        # simulate_download(episode)
-        if episode == 203:  # Simulate failure
-            raise Exception("Download failed")
-
-        print(f"✅ Downloaded episode {episode}")
-        i += 1  # Move to next only if successful
-
-    except Exception as e:
-        print(f"❌ Error downloading episode {episode}: {e}")
-        retry_counts[episode] = retry_counts.get(episode, 0) + 1
-
-        if retry_counts[episode] >= retry_limit:
-            print(f"⚠️ Skipping episode {episode} after {retry_limit} failed attempts.")
-            i += 1  # Give up on it
-        else:
-            print(f"🔁 Will retry episode {episode}")
-            # i stays the same — this episode will be retried
+        file_size = checker.get_file_size("AnimePahe_One_Piece_-_247_720p_HorribleSubs.mp4.crdownload")
+        print("File size:", file_size, "bytes")
+    except FileNotFoundError as e:
+        print(e)
+print([][0])

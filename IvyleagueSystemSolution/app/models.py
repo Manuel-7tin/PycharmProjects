@@ -169,6 +169,7 @@ class Signee(db.Model):
     last_name: Mapped[str] = mapped_column(String(30), nullable=False)
     phone_number: Mapped[str] = mapped_column(String(15), unique=True)
     created_at = mapped_column(DateTime, default=datetime.now)
+    email_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     birth_date: Mapped[date] = mapped_column(Date, nullable=False)
     gender = mapped_column(String(5), nullable=False)
 
